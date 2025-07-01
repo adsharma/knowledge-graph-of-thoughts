@@ -79,12 +79,13 @@ fi
 
 # Defaults matching the Python script (excepting log_folder_base and simpleqa_file)
 CONTROLLER_CHOICE_DEFAULT="queryRetrieve"
-DB_CHOICE_DEFAULT="neo4j"
+DB_CHOICE_DEFAULT="networkX"
 TOOL_CHOICE_DEFAULT="tools_v2_3"
 MAX_ITERATIONS_DEFAULT=7
 NEO4J_URI_DEFAULT="bolt://localhost:7687"
 PYTHON_EXECUTOR_URI_DEFAULT="http://localhost:16000/run"
-LLM_EXECUTION_MODEL_DEFAULT="gpt-4o-mini"
+LLM_EXECUTION_MODEL_DEFAULT="qwen3-30"
+LLM_PLANNING_MODEL="qwen3-30"
 LLM_EXECUTION_TEMPERATURE_DEFAULT=0.0
 
 # Track values
@@ -128,6 +129,7 @@ while true; do
         --neo4j_uri) NEO4J_URI="$2"; shift 2 ;;
         --python_executor_uri) PYTHON_EXECUTOR_URI="$2"; shift 2 ;;
         --llm_execution_model) LLM_EXECUTION_MODEL="$2"; shift 2 ;;
+        --llm_plan) LLM_PLANNING_MODEL="$2"; shift 2 ;;
         --llm_execution_temperature) LLM_EXECUTION_TEMPERATURE="$2"; shift 2 ;;
         --gaia_formatter) GAIA_FORMATTER=true; shift ;;
         --) shift; break ;;
@@ -218,6 +220,7 @@ for ((run=1; run<=num_runs; run++)); do
         --tool_choice $TOOL_CHOICE \
         --max_iterations $MAX_ITERATIONS \
         --llm_execution_model $LLM_EXECUTION_MODEL \
+        --llm_planning_model $LLM_PLANNING_MODEL \
         --llm_execution_temperature $LLM_EXECUTION_TEMPERATURE "
 
         # Add additional arguments from the ARGS array

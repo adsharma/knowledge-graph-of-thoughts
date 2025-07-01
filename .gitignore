@@ -66,3 +66,9 @@ llm_cost.json
 # Downloaded files
 kgot/tools/downloads/*
 
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
