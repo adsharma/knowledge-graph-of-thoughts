@@ -72,3 +72,11 @@ node_modules/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Misc
+package-lock.json
+package.json
+playwright.config.ts
+tests-examples/
+tests/
+uv.lock
