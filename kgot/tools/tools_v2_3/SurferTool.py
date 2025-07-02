@@ -43,7 +43,7 @@ from kgot.utils.log_and_statistics import collect_stats
 logger = logging.getLogger("Controller.SurferTool")
 
 class OpenAIModel:
-    def __init__(self, model_name="gpt-4o", temperature=0.5, usage_statistics: UsageStatistics = None):
+    def __init__(self, model_name="qwen3-30", temperature=0.5, usage_statistics: UsageStatistics = None):
         self.model_name = model_name
         self.temperature = temperature
         self.usage_statistics = usage_statistics

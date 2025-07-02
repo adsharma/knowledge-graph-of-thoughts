@@ -49,19 +49,19 @@ class ToolManager(ToolManagerInterface):
         init_browser()
         ### TOOLS ###
         extract_zip_tool = ExtractZipTool()
-        search_tool = SearchTool(model_name="gpt-4o-mini", temperature=0.5, usage_statistics=usage_statistics)
-        LLM_tool = LangchainLLMTool(model_name="gpt-4o-mini", temperature=0.5, usage_statistics=usage_statistics)
-        textInspectorTool = TextInspectorTool(model_name="gpt-4o-mini", temperature=0.5, usage_statistics=usage_statistics)
-        image_question_tool = ImageQuestionTool(model_name="gpt-4o-mini", temperature=0.5, usage_statistics=usage_statistics) 
+        search_tool = SearchTool(model_name="qwen3-30", temperature=0.5, usage_statistics=usage_statistics)
+        LLM_tool = LangchainLLMTool(model_name="qwen3-30", temperature=0.5, usage_statistics=usage_statistics)
+        textInspectorTool = TextInspectorTool(model_name="qwen3-30", temperature=0.5, usage_statistics=usage_statistics)
+        image_question_tool = ImageQuestionTool(model_name="qwen3-30", temperature=0.5, usage_statistics=usage_statistics)
         run_python_tool = RunPythonCodeTool(
             try_to_fix=True,
             times_to_fix=3,
-            model_name="gpt-4o-mini",
+            model_name="qwen3-30",
             temperature=0.5,
             python_executor_uri=python_executor_uri,
             usage_statistics=usage_statistics,
         )
-        
+
         self.tools.extend([
             LLM_tool,
             image_question_tool,
@@ -70,7 +70,7 @@ class ToolManager(ToolManagerInterface):
             run_python_tool,
             extract_zip_tool,
         ])
-            
+
         # Test for python docker
         self._test_python_container(run_python_tool)
 
@@ -87,7 +87,7 @@ import os
 print("Hello, World!")
 print("Python Docker service is running.")
 """)
-        
+
         if response.get("error"):
             print(
                 "\n\n\033[1;31m" + "Failed to connect to Docker instance! Be sure to have a running Docker instance and double check the connection parameters.\n\n")
