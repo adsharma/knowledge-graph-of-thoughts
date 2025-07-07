@@ -1,8 +1,8 @@
 [
   {
-    "name": "SERPAPI",
+    "name": "SEARXNG",
     "env": {
-      "SERPAPI_API_KEY": ""
+      "SEARXNG_URL": "https://searx.be"
     }
   }
 ]

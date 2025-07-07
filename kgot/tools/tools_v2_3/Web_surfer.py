@@ -50,7 +50,7 @@ def init_browser():
     """
     global browser
     global browser_config
-    browser_config["serpapi_key"] = os.environ.get("SERPAPI_API_KEY")
+    browser_config["searxng_url"] = os.environ.get("SEARXNG_URL", "https://searx.be")
 
     if browser is None:
         browser = SimpleTextBrowser(**browser_config)

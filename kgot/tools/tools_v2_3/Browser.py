@@ -6,7 +6,7 @@
 #
 # Main authors: Lorenzo Paleari
 #               Jón Gunnar Hannesson
-# 
+#
 # Most of the code below is from the Microsoft Autogen repository.
 # https://github.com/microsoft/autogen/blob/gaia_multiagent_v01_march_1st/autogen/browser_utils.py
 #
@@ -24,7 +24,6 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import pathvalidate
 import requests
-from serpapi import GoogleSearch
 from kgot.tools.tools_v2_3.Cookies import COOKIES
 from kgot.tools.tools_v2_3.MdConverter import (
     FileConversionException,
@@ -43,7 +42,7 @@ class SimpleTextBrowser:
         start_page: Optional[str] = None,
         viewport_size: Optional[int] = 1024 * 8,
         downloads_folder: Optional[Union[str, None]] = None,
-        serpapi_key: Optional[Union[str, None]] = None,
+        searxng_url: Optional[Union[str, None]] = None,
         request_kwargs: Optional[Union[Dict[str, Any], None]] = None,
     ):
         self.start_page: str = start_page if start_page else "about:blank"
@@ -54,14 +53,16 @@ class SimpleTextBrowser:
         self.viewport_current_page = 0
         self.viewport_pages: List[Tuple[int, int]] = list()
         self.set_address(self.start_page)
-        self.serpapi_key = serpapi_key
-        self.request_kwargs = request_kwargs
+        self.searxng_url = searxng_url if searxng_url else "https://searx.be"
+        self.request_kwargs = request_kwargs if request_kwargs else {}
         self.request_kwargs["cookies"] = COOKIES
         self._mdconvert = MarkdownConverter()
         self._page_content: str = ""
 
         self._find_on_page_query: Union[str, None] = None
-        self._find_on_page_last_result: Union[int, None] = None  # Location of the last result
+        self._find_on_page_last_result: Union[int, None] = (
+            None  # Location of the last result
+        )
 
     @property
     def address(self) -> str:
@@ -76,7 +77,9 @@ class SimpleTextBrowser:
         if uri_or_path == "about:blank":
             self._set_page_content("")
         elif uri_or_path.startswith("google:"):
-            self._serpapi_search(uri_or_path[len("google:"):].strip(), filter_year=filter_year)
+            self._searxng_search(
+                uri_or_path[len("google:") :].strip(), filter_year=filter_year
+            )
         else:
             if (
                 not uri_or_path.startswith("http:")
@@ -113,7 +116,9 @@ class SimpleTextBrowser:
             self.viewport_current_page = len(self.viewport_pages) - 1
 
     def page_down(self) -> None:
-        self.viewport_current_page = min(self.viewport_current_page + 1, len(self.viewport_pages) - 1)
+        self.viewport_current_page = min(
+            self.viewport_current_page + 1, len(self.viewport_pages) - 1
+        )
 
     def page_up(self) -> None:
         self.viewport_current_page = max(self.viewport_current_page - 1, 0)
@@ -123,7 +128,10 @@ class SimpleTextBrowser:
 
         # Did we get here via a previous find_on_page search with the same query?
         # If so, map to find_next
-        if query == self._find_on_page_query and self.viewport_current_page == self._find_on_page_last_result:
+        if (
+            query == self._find_on_page_query
+            and self.viewport_current_page == self._find_on_page_last_result
+        ):
             return self.find_next()
 
         # Ok it's a new search start from the current viewport
@@ -151,7 +159,9 @@ class SimpleTextBrowser:
             if starting_viewport >= len(self.viewport_pages):
                 starting_viewport = 0
 
-        viewport_match = self._find_next_viewport(self._find_on_page_query, starting_viewport)
+        viewport_match = self._find_next_viewport(
+            self._find_on_page_query, starting_viewport
+        )
         if viewport_match is None:
             self._find_on_page_last_result = None
             return None
@@ -160,7 +170,9 @@ class SimpleTextBrowser:
             self._find_on_page_last_result = viewport_match
             return self.viewport
 
-    def _find_next_viewport(self, query: str, starting_viewport: int) -> Union[int, None]:
+    def _find_next_viewport(
+        self, query: str, starting_viewport: int
+    ) -> Union[int, None]:
         """Search for matches between the starting viewport looping when reaching the end."""
 
         if query is None:
@@ -169,7 +181,9 @@ class SimpleTextBrowser:
         # Normalize the query, and convert to a regular expression
         nquery = re.sub(r"\*", "__STAR__", query)
         nquery = " " + (" ".join(re.split(r"\W+", nquery))).strip() + " "
-        nquery = nquery.replace(" __STAR__ ", "__STAR__ ")  # Merge isolated stars with prior word
+        nquery = nquery.replace(
+            " __STAR__ ", "__STAR__ "
+        )  # Merge isolated stars with prior word
         nquery = nquery.replace("__STAR__", ".*").lower()
 
         if nquery.strip() == "":
@@ -212,82 +226,113 @@ class SimpleTextBrowser:
         while start_idx < len(self._page_content):
             end_idx = min(start_idx + self.viewport_size, len(self._page_content))  # type: ignore[operator]
             # Adjust to end on a space
-            while end_idx < len(self._page_content) and self._page_content[end_idx - 1] not in [" ", "\t", "\r", "\n"]:
+            while end_idx < len(self._page_content) and self._page_content[
+                end_idx - 1
+            ] not in [" ", "\t", "\r", "\n"]:
                 end_idx += 1
             self.viewport_pages.append((start_idx, end_idx))
             start_idx = end_idx
 
+    def _searxng_search(
+        self,
+        query: str,
+        filter_year: Optional[int] = None,
+        retry: Optional[bool] = False,
+    ) -> None:
+        """Search using SearxNG instance instead of SerpAPI."""
 
-    def _serpapi_search(self, query: str, filter_year: Optional[int] = None, retry: Optional[bool] = False) -> None:
-        if self.serpapi_key is None:
-            raise ValueError("Missing SerpAPI key.")
-        
+        # Prepare search parameters
         params = {
-            "engine": "google",
             "q": query,
-            "api_key": self.serpapi_key,
+            "format": "json",
+            "engines": "google",
         }
+
+        # Add year filter if specified
         if filter_year is not None and not retry:
-            params["tbs"] = f"cdr:1,cd_min:01/01/{filter_year},cd_max:12/31/{filter_year}"
+            params["time_range"] = f"{filter_year}-{filter_year}"
 
-        search = GoogleSearch(params)
-        results = search.get_dict()
-        self.page_title = f"{query} - Search"
-        if "organic_results" not in results.keys():
-            if not retry and filter_year is not None:
-                self._serpapi_search(query, filter_year=filter_year, retry=True)
-                return
-            raise Exception(f"'organic_results' key not found in results: {results}. Use a less restrictive query.")
-        if len(results['organic_results']) == 0:
-            if not retry and filter_year is not None:
-                self._serpapi_search(query, filter_year=filter_year, retry=True)
-                return
-            year_filter_message = f" with filter year={filter_year}" if filter_year is not None else ""
-            if retry:
-                self._set_page_content(f"No results found for '{query}'{year_filter_message}. Already searched removing year limitation, but No result found. Try with a more general query.")
-                return
-            self._set_page_content(f"No results found for '{query}'{year_filter_message}. Try with a more general query, or remove the year filter.")
-            return
+        try:
+            # Make request to SearxNG instance
+            search_url = f"{self.searxng_url}/search"
+            response = requests.get(search_url, params=params, **self.request_kwargs)
+            response.raise_for_status()
+            results = response.json()
 
-        def _prev_visit(url):
-            for i in range(len(self.history) - 1, -1, -1):
-                if self.history[i][0] == url:
-                    return f"You previously visited this page {round(time.time() - self.history[i][1])} seconds ago.\n"
-            return ""
+            self.page_title = f"{query} - Search"
 
-        web_snippets: List[str] = list()
-        idx = 0
-        if "organic_results" in results:
-            for page in results["organic_results"]:
+            # Check if we have results
+            if "results" not in results or len(results["results"]) == 0:
+                if not retry and filter_year is not None:
+                    self._searxng_search(query, filter_year=filter_year, retry=True)
+                    return
+                year_filter_message = (
+                    f" with filter year={filter_year}"
+                    if filter_year is not None
+                    else ""
+                )
+                if retry:
+                    self._set_page_content(
+                        f"No results found for '{query}'{year_filter_message}. Already searched removing year limitation, but No result found. Try with a more general query."
+                    )
+                    return
+                self._set_page_content(
+                    f"No results found for '{query}'{year_filter_message}. Try with a more general query, or remove the year filter."
+                )
+                return
+
+            def _prev_visit(url):
+                for i in range(len(self.history) - 1, -1, -1):
+                    if self.history[i][0] == url:
+                        return f"You previously visited this page {round(time.time() - self.history[i][1])} seconds ago.\n"
+                return ""
+
+            web_snippets: List[str] = list()
+            idx = 0
+
+            for page in results["results"]:
                 idx += 1
-                date_published = ""
-                if "date" in page:
-                    date_published = "\nDate published: " + page["date"]
 
-                source = ""
-                if "source" in page:
-                    source = "\nSource: " + page["source"]
+                # Extract information from SearxNG result format
+                title = page.get("title", "No title")
+                url = page.get("url", "")
+                content = page.get("content", "")
+                publishedDate = page.get("publishedDate", "")
+
+                date_published = ""
+                if publishedDate:
+                    date_published = f"\nDate published: {publishedDate}"
 
                 snippet = ""
-                if "snippet" in page:
-                    snippet = "\n" + page["snippet"]
+                if content:
+                    snippet = f"\n{content}"
 
-                redacted_version = f"{idx}. [{page['title']}]({page['link']}){date_published}{source}\n{_prev_visit(page['link'])}{snippet}"
-
-                redacted_version = redacted_version.replace("Your browser can't play this video.", "")
+                redacted_version = f"{idx}. [{title}]({url}){date_published}\n{_prev_visit(url)}{snippet}"
+                redacted_version = redacted_version.replace(
+                    "Your browser can't play this video.", ""
+                )
                 web_snippets.append(redacted_version)
 
+            content = (
+                f"A search for '{query}' found {len(web_snippets)} results:\n\n## Web Results\n"
+                + "\n\n".join(web_snippets)
+            )
 
-        content = (
-            f"A Google search for '{query}' found {len(web_snippets)} results:\n\n## Web Results\n"
-            + "\n\n".join(web_snippets)
-        )
+            if retry:
+                content = f"No result were found for filtering year: {filter_year}.\nREMOVED YEAR FILTER.\n\nThe following results can be of any year.\n\n{content}\n"
 
-        if retry:
-            content = f"No result were found for filtering year: {filter_year}.\nREMOVED YEAR FILTER.\n\nThe following results can be of any year.\n\n{content}\n"
+            self._set_page_content(content)
 
-        self._set_page_content(content)
-
+        except requests.exceptions.RequestException as e:
+            self.page_title = "Search Error"
+            self._set_page_content(
+                f"## Search Error\n\nFailed to search using SearxNG: {str(e)}\n\nPlease check your SearxNG instance URL: {self.searxng_url}"
+            )
+        except Exception as e:
+            self.page_title = "Search Error"
+            self._set_page_content(
+                f"## Search Error\n\nUnexpected error during search: {str(e)}"
+            )
 
     def _fetch_page(self, url: str) -> None:
         download_path = ""
@@ -299,7 +344,11 @@ class SimpleTextBrowser:
                 self._set_page_content(res.text_content)
             else:
                 # Prepare the request parameters
-                request_kwargs = self.request_kwargs.copy() if self.request_kwargs is not None else {}
+                request_kwargs = (
+                    self.request_kwargs.copy()
+                    if self.request_kwargs is not None
+                    else {}
+                )
                 request_kwargs["stream"] = True
 
                 # Send a HTTP request to the URL
@@ -320,15 +369,21 @@ class SimpleTextBrowser:
                     fname = None
                     download_path = None
                     try:
-                        fname = pathvalidate.sanitize_filename(os.path.basename(urlparse(url).path)).strip()
-                        download_path = os.path.abspath(os.path.join(self.downloads_folder, fname))
+                        fname = pathvalidate.sanitize_filename(
+                            os.path.basename(urlparse(url).path)
+                        ).strip()
+                        download_path = os.path.abspath(
+                            os.path.join(self.downloads_folder, fname)
+                        )
 
                         suffix = 0
                         while os.path.exists(download_path) and suffix < 1000:
                             suffix += 1
                             base, ext = os.path.splitext(fname)
                             new_fname = f"{base}__{suffix}{ext}"
-                            download_path = os.path.abspath(os.path.join(self.downloads_folder, new_fname))
+                            download_path = os.path.abspath(
+                                os.path.join(self.downloads_folder, new_fname)
+                            )
 
                     except NameError:
                         pass
@@ -339,7 +394,9 @@ class SimpleTextBrowser:
                         if extension is None:
                             extension = ".download"
                         fname = str(uuid.uuid4()) + extension
-                        download_path = os.path.abspath(os.path.join(self.downloads_folder, fname))
+                        download_path = os.path.abspath(
+                            os.path.join(self.downloads_folder, fname)
+                        )
 
                     # Open a file for writing
                     with open(download_path, "wb") as fh:
@@ -350,12 +407,13 @@ class SimpleTextBrowser:
                     local_uri = pathlib.Path(download_path).as_uri()
                     self.set_address(local_uri)
 
-         
         except UnsupportedFormatException as e:
             print(e)
             if download_path:
                 self.page_title = ("Download complete.",)
-                self._set_page_content(f"# Download complete\n\nSaved file to '{download_path}'")
+                self._set_page_content(
+                    f"# Download complete\n\nSaved file to '{download_path}'"
+                )
             else:
                 self.page_title = "Error"
                 self._set_page_content(f"## Error: {e}")
@@ -363,7 +421,9 @@ class SimpleTextBrowser:
             print(e)
             if download_path:
                 self.page_title = ("Download complete.",)
-                self._set_page_content(f"# Download complete\n\nSaved file to '{download_path}'")
+                self._set_page_content(
+                    f"# Download complete\n\nSaved file to '{download_path}'"
+                )
             else:
                 self.page_title = "Error"
                 self._set_page_content(f"## Error: {e}")
@@ -379,13 +439,31 @@ class SimpleTextBrowser:
                 if content_type is not None and "text/html" in content_type.lower():
                     res = self._mdconvert.convert(response)
                     self.page_title = f"Error {response.status_code}"
-                    self._set_page_content(f"## Error {response.status_code}\n\n{res.text_content}")
+                    self._set_page_content(
+                        f"## Error {response.status_code}\n\n{res.text_content}"
+                    )
                 else:
                     text = ""
-                    for chunk in response.iter_content(chunk_size=512, decode_unicode=True):
+                    for chunk in response.iter_content(
+                        chunk_size=512, decode_unicode=True
+                    ):
                         text += chunk
                     self.page_title = f"Error {response.status_code}"
                     self._set_page_content(f"## Error {response.status_code}\n\n{text}")
             except NameError:
                 self.page_title = "Error"
                 self._set_page_content(f"## Error\n\n{str(request_exception)}")
+
+    def set_config(self, **config) -> None:
+        """Update browser configuration."""
+        if "searxng_url" in config:
+            self.searxng_url = config["searxng_url"]
+        if "downloads_folder" in config:
+            self.downloads_folder = config["downloads_folder"]
+        if "viewport_size" in config:
+            self.viewport_size = config["viewport_size"]
+        if "request_kwargs" in config:
+            self.request_kwargs = (
+                config["request_kwargs"] if config["request_kwargs"] else {}
+            )
+            self.request_kwargs["cookies"] = COOKIES
